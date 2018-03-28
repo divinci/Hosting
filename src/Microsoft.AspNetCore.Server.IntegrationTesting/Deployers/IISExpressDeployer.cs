@@ -4,10 +4,12 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using Microsoft.AspNetCore.Server.IntegrationTesting.Common;
 using Microsoft.AspNetCore.Testing;
 using Microsoft.Extensions.Logging;
@@ -143,6 +145,11 @@ namespace Microsoft.AspNetCore.Server.IntegrationTesting
                         if (Logger.IsEnabled(LogLevel.Trace))
                         {
                             Logger.LogTrace($"Config File Content:{Environment.NewLine}===START CONFIG==={Environment.NewLine}{{configContent}}{Environment.NewLine}===END CONFIG===", serverConfig);
+                        }
+
+                        if (DeploymentParameters.HostingModel == HostingModel.InProcess)
+                        {
+                            ModifyWebConfigToInProcess();
                         }
 
                         File.WriteAllText(DeploymentParameters.ServerConfigLocation, serverConfig);
@@ -293,6 +300,20 @@ namespace Microsoft.AspNetCore.Server.IntegrationTesting
             {
                 throw new Exception($"iisexpress Process {_hostProcess.Id} failed to shutdown");
             }
+        }
+
+        private void ModifyWebConfigToInProcess()
+        {
+            var root = DeploymentParameters.PublishedApplicationRootPath;
+            var webConfigFile = $"{root}/web.config";
+            var config = XDocument.Load(webConfigFile);
+            var element = config.Descendants("aspNetCore").FirstOrDefault();
+            element.SetAttributeValue("hostingModel", "inprocess");
+
+            var argsValue = element.Attribute("arguments").Value;
+            var newArgs = argsValue + $" --server Microsoft.AspNetCore.Server.IIS";
+            element.SetAttributeValue("arguments", newArgs);
+            config.Save(webConfigFile);
         }
     }
 }
